@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace StdCsv
@@ -14,16 +15,16 @@ namespace StdCsv
         {
             // defaults picked to open in excel 2013 right away
 
-            Delimiter = ";";
-            NewLine = "\r\n";
-            Quote = "\"";
+            FieldDelimiter = ";";
+            FieldQuote = "\"";
+            LineEnd = "\r\n";
 
             Culture = CultureInfo.InvariantCulture;
         }
 
-        public string Delimiter { get; set; }
-        public string NewLine { get; set; }
-        public string Quote { get; set; }
+        public string FieldDelimiter { get; set; }
+        public string FieldQuote { get; set; }
+        public string LineEnd { get; set; }
         public string NullSubstitution { get; set; }
         public string NewLineSubstitution { get; set; }
         public bool QuoteAllFields { get; set; }
@@ -111,12 +112,12 @@ namespace StdCsv
                 string str = MakeField(member.Item1);
 
                 if (!ReferenceEquals(member, schema.Last()))
-                    str += Delimiter;
+                    str += FieldDelimiter;
 
                 await writer.WriteAsync(str);
             }
 
-            await writer.WriteAsync(NewLine);
+            await writer.WriteAsync(LineEnd);
         }
 
         private async Task WriteRow<T>(T row, ICollection<Tuple<string, Func<object, object>>> schema, TextWriter writer)
@@ -128,12 +129,12 @@ namespace StdCsv
                 string str = MakeField(ConvertValue(value));
 
                 if (!ReferenceEquals(member, schema.Last()))
-                    str += Delimiter;
+                    str += FieldDelimiter;
 
                 await writer.WriteAsync(str);
             }
 
-            await writer.WriteAsync(NewLine);
+            await writer.WriteAsync(LineEnd);
         }
 
         private string MakeField(string value)
@@ -145,29 +146,31 @@ namespace StdCsv
 
             if (value == null)
             {
-                return QuoteAllFields ? Quote + Quote : value;
+                return QuoteAllFields ? FieldQuote + FieldQuote : value;
             }
 
             if (NewLineSubstitution != null)
             {
-                value = value.Replace(NewLine, NewLineSubstitution);
+                value = Regex.Replace(value, Regex.Escape(LineEnd) + @"|\r\n|\n", NewLineSubstitution);
             }
 
-            bool containsQuote = value.Contains(Quote);
+            bool containsQuote = value.Contains(FieldQuote);
 
             bool needsQuote = containsQuote ||
                               QuoteAllFields ||
-                              value.Contains(Delimiter) ||
-                              value.Contains(NewLine);
+                              value.Contains(FieldDelimiter) ||
+                              value.Contains('\n') ||
+                              value.Contains("\r\n") ||
+                              value.Contains(LineEnd);
 
             if (needsQuote)
             {
                 if (containsQuote)
                 {
-                    value = value.Replace(Quote, Quote + Quote);
+                    value = value.Replace(FieldQuote, FieldQuote + FieldQuote);
                 }
 
-                value = Quote + value + Quote;
+                value = FieldQuote + value + FieldQuote;
             }
 
             return value;

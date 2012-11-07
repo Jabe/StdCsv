@@ -30,9 +30,32 @@ namespace StdCsv
         public bool SortColumns { get; set; }
         public CultureInfo Culture { get; set; }
 
-        public async Task Write<T>(IEnumerable<T> rows, TextWriter writer, bool includeHeader = true)
+        public async Task WriteDictionary(IEnumerable<IDictionary<string, object>> rows, TextWriter writer,
+                                          bool includeHeader = true)
         {
-            IList<MemberInfo> schema = GetSchema(typeof (T));
+            Tuple<string, Func<object, object>>[] schema = null;
+
+            foreach (var row in rows)
+            {
+                if (schema == null)
+                {
+                    schema = GetSchema(row).ToArray();
+
+                    if (includeHeader)
+                    {
+                        await WriteHeader(schema, writer);
+                    }
+                }
+
+                await WriteRow(row, schema, writer);
+            }
+
+            await writer.FlushAsync();
+        }
+
+        public async Task WriteObjects<T>(IEnumerable<T> rows, TextWriter writer, bool includeHeader = true)
+        {
+            Tuple<string, Func<object, object>>[] schema = GetSchema(typeof (T)).ToArray();
 
             if (includeHeader)
             {
@@ -47,7 +70,17 @@ namespace StdCsv
             await writer.FlushAsync();
         }
 
-        private IList<MemberInfo> GetSchema(Type type)
+        private IEnumerable<Tuple<string, Func<object, object>>> GetSchema(IDictionary<string, object> row)
+        {
+            foreach (var kv in row)
+            {
+                string key = kv.Key;
+                Func<object, object> accessor = r => ((IDictionary<string, object>) r)[key];
+                yield return Tuple.Create(key, accessor);
+            }
+        }
+
+        private IEnumerable<Tuple<string, Func<object, object>>> GetSchema(Type type)
         {
             IEnumerable<MemberInfo> info = type.GetMembers()
                 .Where(x => x.MemberType == MemberTypes.Field || x.MemberType == MemberTypes.Property);
@@ -55,16 +88,29 @@ namespace StdCsv
             if (SortColumns)
                 info = info.OrderBy(x => x.Name);
 
-            return info.ToList();
+            foreach (MemberInfo member in info)
+            {
+                var prop = member as PropertyInfo;
+                var field = member as FieldInfo;
+
+                Func<object, object> accessor = row => null;
+
+                if (prop != null)
+                    accessor = row => prop.GetValue(row, null);
+                else if (field != null)
+                    accessor = field.GetValue;
+
+                yield return Tuple.Create(member.Name, accessor);
+            }
         }
 
-        private async Task WriteHeader(IList<MemberInfo> schema, TextWriter writer)
+        private async Task WriteHeader(ICollection<Tuple<string, Func<object, object>>> schema, TextWriter writer)
         {
-            foreach (MemberInfo member in schema)
+            foreach (var member in schema)
             {
-                string str = MakeField(member.Name);
+                string str = MakeField(member.Item1);
 
-                if (member != schema.Last())
+                if (!ReferenceEquals(member, schema.Last()))
                     str += Delimiter;
 
                 await writer.WriteAsync(str);
@@ -73,23 +119,15 @@ namespace StdCsv
             await writer.WriteAsync(NewLine);
         }
 
-        private async Task WriteRow<T>(T row, IList<MemberInfo> schema, TextWriter writer)
+        private async Task WriteRow<T>(T row, ICollection<Tuple<string, Func<object, object>>> schema, TextWriter writer)
         {
-            foreach (MemberInfo member in schema)
+            foreach (var member in schema)
             {
-                var prop = member as PropertyInfo;
-                var field = member as FieldInfo;
-
-                object value = null;
-
-                if (prop != null)
-                    value = prop.GetValue(row, null);
-                else if (field != null)
-                    value = field.GetValue(row);
+                object value = member.Item2(row);
 
                 string str = MakeField(ConvertValue(value));
 
-                if (member != schema.Last())
+                if (!ReferenceEquals(member, schema.Last()))
                     str += Delimiter;
 
                 await writer.WriteAsync(str);

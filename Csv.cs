@@ -151,7 +151,7 @@ namespace StdCsv
 
             if (NewLineSubstitution != null)
             {
-                value = Regex.Replace(value, Regex.Escape(LineEnd) + @"|\r\n|\n", NewLineSubstitution);
+                value = Regex.Replace(value, Regex.Escape(LineEnd) + @"|\r\n|\n|\r", NewLineSubstitution);
             }
 
             bool containsQuote = value.Contains(FieldQuote);

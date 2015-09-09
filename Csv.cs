@@ -29,6 +29,7 @@ namespace StdCsv
         public string NewLineSubstitution { get; set; }
         public bool QuoteAllFields { get; set; }
         public bool SortColumns { get; set; }
+        public bool IncludeExcelMetaData { get; set; }
         public CultureInfo Culture { get; set; }
 
         public async Task WriteDictionary(IEnumerable<IDictionary<string, object>> rows, TextWriter writer,
@@ -107,6 +108,12 @@ namespace StdCsv
 
         private async Task WriteHeader(ICollection<Tuple<string, Func<object, object>>> schema, TextWriter writer)
         {
+            if (IncludeExcelMetaData)
+            {
+                await writer.WriteAsync("sep=" + FieldDelimiter);
+                await writer.WriteAsync(LineEnd);
+            }
+
             foreach (var member in schema)
             {
                 string str = MakeField(member.Item1);

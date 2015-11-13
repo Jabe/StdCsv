@@ -133,7 +133,7 @@ namespace StdCsv
             {
                 object value = member.Item2(row);
 
-                string str = MakeField(ConvertValue(value));
+                string str = MakeField(ConvertValueToString(value));
 
                 if (!ReferenceEquals(member, schema.Last()))
                     str += FieldDelimiter;
@@ -183,7 +183,7 @@ namespace StdCsv
             return value;
         }
 
-        private string ConvertValue(object value)
+        protected virtual string ConvertValueToString(object value)
         {
             if (value is DateTime)
             {
